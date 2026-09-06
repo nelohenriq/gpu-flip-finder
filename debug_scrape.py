@@ -1,14 +1,9 @@
 from __future__ import annotations
 
 import re
-import uuid
-from datetime import datetime
 from typing import Iterable
 
-from sqlalchemy.orm import Session
-
-from src.config.settings import settings
-from src.db.models import Listing as ORMListing
+from scrapling import DynamicFetcher, Selector
 
 
 class Listing:
@@ -28,11 +23,7 @@ class OLXScraper:
     def __init__(self, base_url="https://www.olx.pt", max_pages=5, timeout=30):
         self.base_url = base_url.rstrip("/")
         self.max_pages = max_pages
-        self.timeout = timeout
-
-    def _search_url(self, query, page):
-        encoded_query = re.sub(r"\s+", " ", query.strip())
-        return f"{self.base_url}/search?q={encoded_query}&page={page}"
+        self.timeout = timeout * 1000
 
     def _to_float(self, value):
         cleaned = re.sub(r"[^0-9,\.]", "", value or "").replace(",", ".")
@@ -42,32 +33,30 @@ class OLXScraper:
             return 0.0
 
     def fetch_pages(self, queries: Iterable[str]):
-        from scrapling import StealthyFetcher, Selector
-
         for query in queries:
             for page in range(1, self.max_pages + 1):
-                url = self._search_url(query, page)
+                url = f"{self.base_url}/search?q={query.replace(' ', '+')}&page={page}"
                 try:
-                    response = StealthyFetcher.fetch(
+                    response = DynamicFetcher.fetch(
                         url,
-                        solve_cloudflare=True,
+                        wait=2000,
                         timeout=self.timeout,
-                        wait=1500,
                     )
-                except Exception:
+                except Exception as exc:
+                    print(f"Fetch error for {url}: {exc}")
                     break
                 if not response or not response.text:
                     break
                 yield from self._parse_listings(response.text, query)
 
     def _parse_listings(self, html, query):
-        from scrapling import Selector
         try:
             selector = Selector(text=html, proxy=None)
         except Exception:
             return []
 
         cards = selector.css('[data-testid="listing-card"], article, [data-cy="l-card"]')
+        print(f"Parsed {len(cards)} cards for query={query}")
         if not cards:
             return []
 
@@ -105,3 +94,11 @@ class OLXScraper:
                 location=location,
             ))
         return results
+
+
+if __name__ == "__main__":
+    scraper = OLXScraper("https://www.olx.pt", max_pages=1)
+    results = list(scraper.fetch_pages(["RTX", "RX", "placa gráfica", "GPU"]))
+    print(f"Found {len(results)} listings")
+    for r in results[:10]:
+        print(r.title, r.price, r.url)
