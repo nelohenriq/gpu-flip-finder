@@ -6,6 +6,7 @@ from typing import Iterable
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from src.api.comps import router as comps_router
 from src.config.settings import settings
 from src.db.session import SessionLocal, init_db
 from src.scrapers.olx import Listing
@@ -13,6 +14,7 @@ from src.scrapers.pipeline import run_pipeline
 from src.ai.valuation import margin, score_listing
 
 app = FastAPI(title="gpu-flip-finder", version="0.1.0")
+app.include_router(comps_router)
 
 
 @app.on_event("startup")

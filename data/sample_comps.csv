@@ -1,0 +1,5 @@
+model,price,currency,source,url,title
+RTX 3060,140,EUR,manual,https://example.com/rtx3060,RTX 3060 12GB
+RTX 3060,150,EUR,manual,https://example.com/rtx3060-2,RTX 3060
+RX 6600,130,EUR,manual,https://example.com/rx6600,RX 6600
+RTX 4060,230,EUR,manual,https://example.com/rtx4060,RTX 4060 8GB

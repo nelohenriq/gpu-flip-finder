@@ -1,48 +1,46 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+import uuid
+from datetime import datetime
 from typing import Iterable
 
 import requests
-from scrapling.fetchers import RequestsFetcher
-from scrapling.parser import Selector
+from scrapling import Selector
 
 
-@dataclass
 class Listing:
-    source: str
-    external_id: str
-    title: str
-    url: str
-    price: float
-    currency: str
-    condition: str | None = None
-    location: str | None = None
-    seller: str | None = None
+    def __init__(self, source, external_id, title, url, price, currency="EUR", condition=None, location=None, seller=None):
+        self.source = source
+        self.external_id = external_id
+        self.title = title
+        self.url = url
+        self.price = price
+        self.currency = currency
+        self.condition = condition
+        self.location = location
+        self.seller = seller
 
 
 class OLXScraper:
-    def __init__(self, base_url: str, max_pages: int = 5, timeout: int = 30) -> None:
+    def __init__(self, base_url="https://www.olx.pt", max_pages=5, timeout=30):
         self.base_url = base_url.rstrip("/")
         self.max_pages = max_pages
         self.timeout = timeout
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": "Mozilla/5.0"})
 
-    def _search_url(self, query: str, page: int) -> str:
+    def _search_url(self, query, page):
         return f"{self.base_url}/search?q={requests.utils.quote(query)}&page={page}"
 
-    def _to_float(self, value: str) -> float:
+    def _to_float(self, value):
         cleaned = re.sub(r"[^0-9,\.]", "", value or "").replace(",", ".")
-        if not cleaned:
-            return 0.0
         try:
             return float(cleaned)
         except ValueError:
             return 0.0
 
-    def fetch_pages(self, queries: Iterable[str]) -> Iterable[Listing]:
+    def fetch_pages(self, queries: Iterable[str]):
         for query in queries:
             for page in range(1, self.max_pages + 1):
                 url = self._search_url(query, page)
@@ -52,19 +50,20 @@ class OLXScraper:
                     break
                 if response.status_code != 200:
                     break
-                yield from self._parse_listings(response.text)
+                yield from self._parse_listings(response.text, query)
 
-    def _parse_listings(self, html: str) -> Iterable[Listing]:
+    def _parse_listings(self, html, query):
         try:
             selector = Selector(text=html, proxy=None)
         except Exception:
-            return
+            return []
 
         cards = selector.css('[data-testid="listing-card"], article, [data-cy="l-card"]')
         if not cards:
-            return
+            return []
 
         seen = set()
+        results = []
         for card in cards:
             title = card.css("h6, [data-testid='ad-title'], .title").get_text(" ", strip=True)
             href = card.css("a::attr(href)").get()
@@ -86,7 +85,7 @@ class OLXScraper:
             location = card.css(".location, [data-testid='location-name']").get_text(" ", strip=True) or None
             condition = card.css(".condition, [data-testid='ad-status']").get_text(" ", strip=True) or None
 
-            yield Listing(
+            results.append(Listing(
                 source="olx",
                 external_id=external_id,
                 title=title,
@@ -95,4 +94,5 @@ class OLXScraper:
                 currency="EUR",
                 condition=condition,
                 location=location,
-            )
+            ))
+        return results
